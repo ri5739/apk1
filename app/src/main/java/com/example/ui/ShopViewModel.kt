@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.ai.AiReplyEngine
 import com.example.ai.AiReplyResult
 import com.example.data.firebase.ShopRepository
+import com.example.data.local.LocalBridgeCache
 import com.example.data.model.AppLanguage
 import com.example.data.model.BusinessProfile
 import com.example.data.model.MessageIntent
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -45,6 +47,7 @@ sealed interface SandboxUiState {
 class ShopViewModel(
     private val repository: ShopRepository,
     private val currentUserId: String,
+    private val localCache: LocalBridgeCache,
     private val aiEngine: AiReplyEngine = AiReplyEngine()
 ) : ViewModel() {
 
@@ -108,6 +111,18 @@ class ShopViewModel(
         )
 
     init {
+        // Keep the background notification listener in sync with Firestore-backed UI state.
+        // Without this bridge, the service sees only default profile settings and an empty catalog.
+        viewModelScope.launch {
+            profileState.collect { state ->
+                if (state is UiState.Success) localCache.saveProfile(state.data)
+            }
+        }
+        viewModelScope.launch {
+            productsState.collect { state ->
+                if (state is UiState.Success) localCache.saveProducts(state.data)
+            }
+        }
         viewModelScope.launch {
             val ownerName = Firebase.auth.currentUser?.displayName.orEmpty()
             repository.ensureInitialProfile(currentUserId, ownerName)
