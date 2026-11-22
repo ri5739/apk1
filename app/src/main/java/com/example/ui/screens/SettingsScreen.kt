@@ -150,6 +150,8 @@ fun SettingsScreen(
 
             item {
                 val context = LocalContext.current
+                var debugToken by remember { mutableStateOf("") }
+                var tokenStatus by remember { mutableStateOf("") }
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                     shape = RoundedCornerShape(20.dp)
@@ -159,25 +161,44 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = if (isBn) "Firebase App Check / Debug Token" else "Firebase App Check / Debug Token",
+                            text = "Firebase App Check / Debug Token",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = if (isBn)
-                                "Firebase-এর invalid App Check token সমস্যার জন্য এই আলাদা অপশন। Debug APK চালু করলে Firebase SDK Logcat-এ Debug Token তৈরি/দেখায়। Token এখানে বানানো বা দেখানো হয় না।"
+                                "Debug APK-এর আসল App Check token এখানে আনুন। Token Firebase Console > App Check > Debug tokens-এ register না করা পর্যন্ত invalid দেখাতে পারে।"
                             else
-                                "Dedicated help for Firebase invalid App Check token. When the debug APK runs, Firebase SDK generates/logs its debug token. This screen does not fabricate or expose a token.",
+                                "Fetch the actual App Check token from this debug APK. It may be rejected until registered under Firebase Console > App Check > Debug tokens.",
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        Text(
-                            text = if (isBn)
-                                "Token পেতে: Android Studio-এর Logcat-এ AppCheckInit / Firebase App Check debug token message খুঁজুন। আসল token Firebase Console-এর App Check > Debug tokens-এ যোগ করুন।"
-                            else
-                                "To obtain the token: find the Firebase App Check debug-token message in Android Studio Logcat. Register the real token in Firebase Console > App Check > Debug tokens.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                        Button(
+                            onClick = {
+                                tokenStatus = if (isBn) "Token আনা হচ্ছে…" else "Fetching token…"
+                                com.google.firebase.appcheck.FirebaseAppCheck.getInstance().getToken(false)
+                                    .addOnSuccessListener { result ->
+                                        debugToken = result.token.orEmpty()
+                                        tokenStatus = if (debugToken.isBlank()) "Token is empty" else if (isBn) "Token পাওয়া গেছে—Firebase Console-এ register করুন।" else "Token fetched—register it in Firebase Console."
+                                    }
+                                    .addOnFailureListener { error ->
+                                        tokenStatus = (if (isBn) "Token fetch ব্যর্থ: " else "Token fetch failed: ") + (error.message ?: "Unknown error")
+                                    }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isBn) "Debug Token আনুন" else "Fetch Debug Token")
+                        }
+                        if (tokenStatus.isNotBlank()) Text(tokenStatus, style = MaterialTheme.typography.bodySmall)
+                        if (debugToken.isNotBlank()) {
+                            OutlinedTextField(
+                                value = debugToken,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("App Check Debug Token") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2
+                            )
+                        }
                         Button(
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://console.firebase.google.com/project/com-aistudio-shopreply-k-57fe6/appcheck"))
