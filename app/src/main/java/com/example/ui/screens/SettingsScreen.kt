@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -116,6 +117,16 @@ fun SettingsScreen(
                             else
                                 "Auto-reply needs Notification Access. Open settings below, enable ShopReply AI, then return to the app.",
                             style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = if (AutoReplyNotificationService.isNotificationListenerEnabled(context))
+                                (if (isBn) "সংযোগ অবস্থা: চালু ✓" else "Connection status: Enabled ✓")
+                            else
+                                (if (isBn) "সংযোগ অবস্থা: বন্ধ — Notification Access চালু করুন" else "Connection status: Off — enable Notification Access"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (AutoReplyNotificationService.isNotificationListenerEnabled(context))
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
                         )
                         Button(
                             onClick = { AutoReplyNotificationService.openNotificationListenerSettings(context) },
