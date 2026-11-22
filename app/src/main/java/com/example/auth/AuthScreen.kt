@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -183,8 +182,8 @@ fun AuthScreen(
                     }
                 }
 
-                GoogleSignInButton(
-                    label = stringResource(id = R.string.sign_in_with_google),
+                ContinueWithoutGoogleButton(
+                    label = "Google ছাড়া চালিয়ে যান",
                     onAuthSuccess = {
                         errorMessage = null
                         onAuthSuccess()
