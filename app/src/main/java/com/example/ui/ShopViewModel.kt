@@ -48,7 +48,7 @@ class ShopViewModel(
     private val repository: ShopRepository,
     private val currentUserId: String,
     private val localCache: LocalBridgeCache,
-    private val aiEngine: AiReplyEngine = AiReplyEngine()
+    private val aiEngine: AiReplyEngine = AiReplyEngine(localCache)
 ) : ViewModel() {
 
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 8)
