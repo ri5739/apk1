@@ -47,6 +47,7 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.BusinessProfile
 import com.example.data.model.DEFAULT_SUPPORTED_CHANNELS
 import com.example.data.model.GreetingStyle
+import com.example.data.local.LocalBridgeCache
 import com.example.service.AutoReplyNotificationService
 import com.example.ui.AppStrings
 import com.example.ui.BengaliStrings
@@ -208,6 +209,53 @@ fun SettingsScreen(
                         ) {
                             Text(if (isBn) "Firebase App Check খুলুন" else "Open Firebase App Check")
                         }
+                    }
+                }
+            }
+
+            item {
+                val context = LocalContext.current
+                var groqKey by remember { mutableStateOf(LocalBridgeCache(context).getGroqApiKey()) }
+                var groqStatus by remember { mutableStateOf("") }
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Groq Online AI + Offline Engine", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isBn) "Groq-এর ফ্রি API key দিন। API limit শেষ বা ইন্টারনেট না থাকলে অ্যাপের Offline Engine পণ্যের তথ্য, FAQ-ধরনের নিয়ম ও সংরক্ষিত নিরাপদ উত্তর-নমুনা ব্যবহার করবে।"
+                            else "Add your Groq API key. If the quota is exhausted or the network is unavailable, the on-device offline engine uses catalog facts and saved safe reply examples.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedTextField(
+                            value = groqKey,
+                            onValueChange = { groqKey = it.trim() },
+                            label = { Text("Groq API Key") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Button(
+                            onClick = {
+                                LocalBridgeCache(context).saveGroqApiKey(groqKey)
+                                groqStatus = if (groqKey.isBlank()) {
+                                    if (isBn) "API key মুছে ফেলা হয়েছে; Offline Engine চালু থাকবে।" else "API key cleared; offline engine remains available."
+                                } else {
+                                    if (isBn) "API key এই ডিভাইসে সংরক্ষণ করা হয়েছে।" else "API key saved on this device."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (isBn) "Groq API Key সংরক্ষণ করুন" else "Save Groq API Key") }
+                        if (groqStatus.isNotBlank()) Text(groqStatus, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            if (isBn) "API key গোপন রাখুন। এই সংস্করণে key ডিভাইসের private app storage-এ থাকে; shared বা public ডিভাইসে ব্যবহার করবেন না।"
+                            else "Keep this key private. This version stores it in the app's private device storage; do not use on shared/public devices.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
                     }
                 }
             }
