@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -142,6 +144,49 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
+                    }
+                }
+            }
+
+            item {
+                val context = LocalContext.current
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (isBn) "Firebase App Check / Debug Token" else "Firebase App Check / Debug Token",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (isBn)
+                                "Firebase-এর invalid App Check token সমস্যার জন্য এই আলাদা অপশন। Debug APK চালু করলে Firebase SDK Logcat-এ Debug Token তৈরি/দেখায়। Token এখানে বানানো বা দেখানো হয় না।"
+                            else
+                                "Dedicated help for Firebase invalid App Check token. When the debug APK runs, Firebase SDK generates/logs its debug token. This screen does not fabricate or expose a token.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = if (isBn)
+                                "Token পেতে: Android Studio-এর Logcat-এ AppCheckInit / Firebase App Check debug token message খুঁজুন। আসল token Firebase Console-এর App Check > Debug tokens-এ যোগ করুন।"
+                            else
+                                "To obtain the token: find the Firebase App Check debug-token message in Android Studio Logcat. Register the real token in Firebase Console > App Check > Debug tokens.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://console.firebase.google.com/project/com-aistudio-shopreply-k-57fe6/appcheck"))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isBn) "Firebase App Check খুলুন" else "Open Firebase App Check")
+                        }
                     }
                 }
             }
