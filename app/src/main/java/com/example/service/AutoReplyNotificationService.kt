@@ -116,22 +116,35 @@ class AutoReplyNotificationService : NotificationListenerService() {
     }
 
     private fun extractSenderAndMessage(extras: Bundle): Pair<String, String> {
-        val sender = extras.getCharSequence(Notification.EXTRA_TITLE)
-            ?.toString()?.trim().orEmpty()
+        // Prefer Android MessagingStyle data, which usually identifies the actual sender
+        // in group notifications rather than only the conversation title.
+        val rawMessages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        if (rawMessages != null) {
+            for (raw in rawMessages.reversed()) {
+                val messageBundle = raw as? Bundle ?: continue
+                val text = messageBundle.getCharSequence("text")?.toString()?.trim().orEmpty()
+                if (text.isBlank()) continue
+                val personBundle = messageBundle.getBundle("sender")
+                val sender = personBundle?.getCharSequence("name")?.toString()?.trim().orEmpty()
+                if (sender.isNotBlank()) return sender to text
+            }
+        }
+
+        val sender = sequenceOf(
+            extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+            extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
+        ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+            .firstOrNull().orEmpty()
 
         val message = sequenceOf(
             extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
             extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
-            .firstOrNull().orEmpty()
+            .firstOrNull()
 
-        val resolvedMessage = if (message.isNotBlank()) {
-            message
-        } else {
-            extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-                ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotBlank) }
-                ?.lastOrNull().orEmpty()
-        }
+        val resolvedMessage = message ?: extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotBlank) }
+            ?.lastOrNull().orEmpty()
 
         return sender to resolvedMessage
     }
