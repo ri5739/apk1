@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // STEP 1: Configure App Check with launch intent before any UI or Firebase operations
-        configureAppCheck(this, intent)
+        configureAppCheck(this)
 
         enableEdgeToEdge()
         setContent {
