@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -21,6 +22,8 @@ class AiReplyEngine(private val cache: LocalBridgeCache) {
                 val online = withTimeout(60000L) { withContext(Dispatchers.IO) { groq(key, senderName, incomingMessage, profile, products) } }
                 cache.saveLearnedReply(incomingMessage, online.reply)
                 return online
+            } catch (e: TimeoutCancellationException) {
+                Log.w("ShopReplyAI", "Groq timed out; using offline fallback", e)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 if ((e as? GroqError)?.status == 429) cache.setGroqCooldown(System.currentTimeMillis() + 21600000L)
