@@ -7,8 +7,4 @@
 
     <string name="hero_banner_content_desc">ShopReply AI 24/7 messaging assistant illustration</string>
 
-    <string name="sign_in_with_google">Google দিয়ে সাইন ইন করুন / Sign in with Google</string>
-
-    <string name="default_web_client_id">REPLACE_WITH_WEB_CLIENT_ID</string>
-
 </resources>
