@@ -30,6 +30,7 @@ class AutoReplyNotificationService : NotificationListenerService() {
     private lateinit var localCache: LocalBridgeCache
     private val aiEngine by lazy { AiReplyEngine() }
     private val recentReplyTimestamps = ConcurrentHashMap<String, Long>()
+    private val inFlightReplyKeys = ConcurrentHashMap.newKeySet<String>()
 
     override fun onCreate() {
         super.onCreate()
@@ -67,11 +68,14 @@ class AutoReplyNotificationService : NotificationListenerService() {
         if (senderName.equals("You", ignoreCase = true)) return
 
         // Cooldown deduplication to prevent infinite reply loops or duplicate triggers
-        val dedupKey = "$pkg|$senderName|$messageText"
+        val dedupKey = "$pkg|${senderName.trim().lowercase()}|${messageText.trim().lowercase()}"
         val now = System.currentTimeMillis()
+        // Bound the cache and suppress concurrent duplicate processing. Only successful
+        // RemoteInput dispatches enter the cooldown map; failed AI/send attempts can retry.
+        recentReplyTimestamps.entries.removeIf { now - it.value > DEDUP_CACHE_MS }
         val lastSent = recentReplyTimestamps[dedupKey]
         if (lastSent != null && (now - lastSent) < COOLDOWN_MS) return
-        recentReplyTimestamps[dedupKey] = now
+        if (!inFlightReplyKeys.add(dedupKey)) return
 
         val products = localCache.getProducts()
         val platform = MessagingPlatform.fromPackageName(pkg)
@@ -87,7 +91,8 @@ class AutoReplyNotificationService : NotificationListenerService() {
 
                 val sent = sendRemoteInputReply(replyAction, aiResult.reply)
                 if (sent) {
-                    Log.d(TAG, "Auto-replied to $senderName via $pkg [${aiResult.intent}]")
+                    recentReplyTimestamps[dedupKey] = System.currentTimeMillis()
+                    Log.d(TAG, "RemoteInput reply dispatched for $senderName via $pkg [${aiResult.intent}]")
                     val currentUid = Firebase.auth.currentUser?.uid
                     if (!currentUid.isNullOrBlank()) {
                         val repo = ShopRepository(applicationContext)
@@ -104,6 +109,8 @@ class AutoReplyNotificationService : NotificationListenerService() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to auto-reply to $pkg notification", e)
+            } finally {
+                inFlightReplyKeys.remove(dedupKey)
             }
         }
     }
@@ -156,6 +163,7 @@ class AutoReplyNotificationService : NotificationListenerService() {
     companion object {
         private const val TAG = "AutoReplyService"
         private const val COOLDOWN_MS = 15_000L
+        private const val DEDUP_CACHE_MS = 24 * 60 * 60 * 1000L
 
         fun isNotificationListenerEnabled(context: Context): Boolean {
             val flat = Settings.Secure.getString(
