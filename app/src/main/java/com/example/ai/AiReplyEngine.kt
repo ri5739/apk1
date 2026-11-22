@@ -1,161 +1,105 @@
 package com.example.ai
-
 import android.util.Log
-import com.example.data.model.BusinessProfile
-import com.example.data.model.GreetingStyle
-import com.example.data.model.MessageIntent
-import com.example.data.model.Product
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.Schema
-import com.google.firebase.ai.type.generationConfig
+import com.example.data.local.LocalBridgeCache
+import com.example.data.model.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
-data class AiReplyResult(
-    val intent: MessageIntent,
-    val reply: String,
-    val matchedProductName: String?,
-    val summaryNote: String
-)
+data class AiReplyResult(val intent: MessageIntent, val reply: String, val matchedProductName: String?, val summaryNote: String)
 
-class AiReplyEngine {
-
-    private val replySchema = Schema.obj(
-        properties = mapOf(
-            "intent" to Schema.enumeration(
-                values = listOf("PRODUCT_INQUIRY", "CASUAL_CHAT", "CUSTOMER_SUPPORT"),
-                description = "Classify client message: PRODUCT_INQUIRY if asking about items/prices/availability/ordering, CASUAL_CHAT if greeting/small talk/friendly chat, CUSTOMER_SUPPORT if delivery/complaint/refund/help."
-            ),
-            "reply" to Schema.string(
-                description = "Natural, warm, concise messaging reply ready to send directly to the customer on WhatsApp or Facebook Messenger in the same language (Bengali, Banglish, or English) the customer used."
-            ),
-            "matchedProductName" to Schema.string(
-                description = "Name of the catalog product mentioned if applicable, otherwise empty string.",
-                nullable = true
-            ),
-            "summaryNote" to Schema.string(
-                description = "Brief 1-sentence note for the shop owner explaining why this reply was chosen."
-            )
-        ),
-        optionalProperties = listOf("matchedProductName")
-    )
-
-    private val structuredModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = MODEL_NAME,
-            generationConfig = generationConfig {
-                responseMimeType = "application/json"
-                responseSchema = replySchema
-                temperature = 0.65f
-            }
-        )
-    }
-
-    suspend fun generateReply(
-        senderName: String,
-        incomingMessage: String,
-        profile: BusinessProfile,
-        products: List<Product>
-    ): AiReplyResult {
-        val prompt = buildPrompt(senderName, incomingMessage, profile, products)
-        return try {
-            val response = withTimeout(TIMEOUT_MS) {
-                structuredModel.generateContent(prompt)
-            }
-            val jsonString = response.text
-                ?: throw IllegalStateException("AI model returned an empty response.")
-            val json = JSONObject(jsonString)
-            val intentRaw = json.optString("intent", MessageIntent.CUSTOMER_SUPPORT.raw)
-            val replyText = json.optString("reply", "").trim()
-            if (replyText.isEmpty()) {
-                throw IllegalStateException("AI model returned a blank reply.")
-            }
-            val matchedProduct = json.optString("matchedProductName", "")
-                .takeIf { it.isNotBlank() && it != "null" }
-            val summaryNote = json.optString("summaryNote", "").trim()
-
-            AiReplyResult(
-                intent = MessageIntent.fromRaw(intentRaw),
-                reply = replyText,
-                matchedProductName = matchedProduct,
-                summaryNote = summaryNote
-            )
-        } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "AI reply timed out after ${TIMEOUT_MS / 1000}s", e)
-            throw e
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "Firebase AI reply generation failed", e)
-            throw e
-        }
-    }
-
-    private fun buildPrompt(
-        senderName: String,
-        incomingMessage: String,
-        profile: BusinessProfile,
-        products: List<Product>
-    ): String {
-        val toneGuide = when (GreetingStyle.fromRaw(profile.greetingStyle)) {
-            GreetingStyle.FRIENDLY -> "Warm, polite, friendly, human-like shopkeeper tone (use natural greetings like আসসালামু আলাইকুম / ভাইয়া / আপু when chatting in Bengali or Banglish)."
-            GreetingStyle.PROFESSIONAL -> "Polite, clear, respectful customer care tone with crisp details."
-            GreetingStyle.CASUAL -> "Relaxed, conversational, buddy-like tone so normal chat feels fun and genuine."
-        }
-
-        val catalogText = if (products.isEmpty()) {
-            "No products are listed in the catalog yet. If the customer asks about a specific product, politely ask them which item they are looking for or mention that the shop owner will confirm shortly."
-        } else {
-            products.joinToString("\n") { product ->
-                val stockText = if (product.inStock) "In Stock" else "Currently Out of Stock"
-                val priceFormatted = if (product.price % 1.0 == 0.0) {
-                    product.price.toLong().toString()
-                } else {
-                    product.price.toString()
-                }
-                "- ${product.name} | Price: ${product.currency}$priceFormatted | Category: ${product.category.ifBlank { "General" }} | Status: $stockText | Details: ${product.description.ifBlank { "Standard quality item" }}"
+class AiReplyEngine(private val cache: LocalBridgeCache) {
+    suspend fun generateReply(senderName: String, incomingMessage: String, profile: BusinessProfile, products: List<Product>): AiReplyResult {
+        val key = cache.getGroqApiKey()
+        if (key.isNotBlank() && !cache.groqCooldownActive()) {
+            try {
+                val online = withTimeout(60000L) { withContext(Dispatchers.IO) { groq(key, senderName, incomingMessage, profile, products) } }
+                cache.saveLearnedReply(incomingMessage, online.reply)
+                return online
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if ((e as? GroqError)?.status == 429) cache.setGroqCooldown(System.currentTimeMillis() + 21600000L)
+                Log.w("ShopReplyAI", "Groq unavailable; using offline fallback", e)
             }
         }
+        return offline(incomingMessage, profile, products)
+    }
 
-        val casualRule = if (profile.casualChatEnabled) {
-            "If the customer is just greeting, joking, or making normal casual conversation (e.g. কেমন আছেন, কি অবস্থা, গল্প করা), chat naturally and warmly like a real friendly human without forcing a sales pitch."
-        } else {
-            "If the customer sends a casual greeting, greet them politely and gently ask how you can help them with products or support today."
+    private fun groq(key: String, sender: String, message: String, profile: BusinessProfile, products: List<Product>): AiReplyResult {
+        val c = URL("https://api.groq.com/openai/v1/chat/completions").openConnection() as HttpURLConnection
+        c.requestMethod = "POST"; c.connectTimeout = 15000; c.readTimeout = 45000; c.doOutput = true
+        c.setRequestProperty("Authorization", "Bearer " + key); c.setRequestProperty("Content-Type", "application/json")
+        try {
+            val system = makePrompt(sender, message, profile, products)
+            val body = JSONObject().put("model", "openai/gpt-oss-120b").put("temperature", 0.65)
+                .put("max_tokens", 700).put("response_format", JSONObject().put("type", "json_object"))
+                .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
+                    .put(JSONObject().put("role", "user").put("content", message)))
+            c.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val status = c.responseCode
+            val raw = (if (status in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) throw GroqError(status, raw.take(300))
+            val obj = JSONObject(JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
+            val reply = obj.optString("reply").trim()
+            if (reply.isBlank()) throw IllegalStateException("Empty Groq response")
+            return AiReplyResult(MessageIntent.fromRaw(obj.optString("intent")), reply,
+                obj.optString("matchedProductName").takeIf { it.isNotBlank() && it != "null" },
+                obj.optString("summaryNote").ifBlank { "Generated by Groq" })
+        } finally { c.disconnect() }
+    }
+
+    private fun offline(message: String, profile: BusinessProfile, products: List<Product>): AiReplyResult {
+        val q = message.trim().lowercase()
+        cache.findLearnedReply(message)?.let { return AiReplyResult(classify(q), it, null, "Offline saved example") }
+        val p = products.firstOrNull { it.name.isNotBlank() && q.contains(it.name.lowercase()) }
+        if (p != null) {
+            val price = if (p.price % 1.0 == 0.0) p.price.toLong().toString() else p.price.toString()
+            return AiReplyResult(MessageIntent.PRODUCT_INQUIRY,
+                "জি, " + p.name + " " + (if (p.inStock) "স্টকে আছে" else "এই মুহূর্তে স্টকে নেই") +
+                    "। দাম " + p.currency + price + "। " + p.description, p.name, "Offline catalog match")
         }
-
-        return """
-You are the 24/7 AI Messaging Assistant for "${profile.businessName}"${if (profile.ownerName.isNotBlank()) " (Owner: ${profile.ownerName})" else ""}.
-Your job is to reply directly to incoming messages from WhatsApp Business, Facebook Page, or Messenger clients.
-
-CRITICAL RULES:
-1. Language Mirroring: Reply in the EXACT language and script style of the client's message. If they write in Bengali (বাংলা), reply in natural Bengali. If they write in Banglish (e.g. "dam koto vai"), reply in warm Banglish or polite Bengali. If they write in English, reply in English.
-2. Intent Behavior:
-   - PRODUCT_INQUIRY: Answer accurately using ONLY the Product Catalog below (quote exact prices, stock status, and details). Never invent fake products or fake prices.
-   - CASUAL_CHAT: $casualRule. This includes ordinary PERSONAL conversations, not just customers: greetings, asking how you are, where you are, what you are doing, jokes, opinions, friendly banter, and everyday chat. Do not mention the shop, products, sales, or customer service unless the sender brings them up.
-   - CUSTOMER_SUPPORT: Act like a helpful, empathetic customer service representative using the Support & Delivery Policy below. Help solve delivery, return, payment, or order issues calmly.
-   - MIXED messages: If a message contains both personal conversation and a business/product question, naturally answer BOTH parts in one reply. Start by responding to the personal part, then answer the business part with verified catalog/policy facts. Do not ignore either part.
-3. Relationship and tone: If context clearly shows the sender is a friend, use relaxed, familiar language; if they are unknown or a customer, remain polite and respectful; if they are clearly a customer, use professional customer-care tone. Do not assume closeness from a name alone. For personal-only messages from an unknown sender, still answer naturally and politely without turning it into a sales pitch.
-4. Tone: $toneGuide
-5. Format: Write a concise, natural chat message (1-4 short sentences, no markdown formatting or asterisks, suitable for WhatsApp/Messenger).
-
-SUPPORT & DELIVERY POLICY:
-${profile.supportPolicy.ifBlank { "Standard friendly support: ask for order details so the team can assist." }}
-
-PRODUCT CATALOG:
-$catalogText
-
-INCOMING CLIENT MESSAGE:
-Sender: $senderName
-Message: "$incomingMessage"
-        """.trimIndent()
+        if (listOf("দাম", "কত", "price", "cost", "dam koto").any(q::contains) && products.isNotEmpty())
+            return AiReplyResult(MessageIntent.PRODUCT_INQUIRY, "কোন পণ্যটির দাম জানতে চাচ্ছেন? পণ্যের নামটি বললে জানাতে পারব।", null, "Offline needs product name")
+        if (listOf("হ্যালো", "হাই", "আসসালামু", "সালাম", "hello", "hi", "hey", "কেমন আছেন").any(q::contains))
+            return AiReplyResult(MessageIntent.CASUAL_CHAT,
+                if (profile.casualChatEnabled) "ওয়ালাইকুম আসসালাম! ভালো আছি, ধন্যবাদ। আপনি কেমন আছেন?" else "আসসালামু আলাইকুম! কীভাবে সাহায্য করতে পারি?",
+                null, "Offline greeting")
+        if (listOf("ডেলিভারি", "delivery", "অর্ডার", "order", "সমস্যা", "refund", "রিটার্ন", "return").any(q::contains))
+            return AiReplyResult(MessageIntent.CUSTOMER_SUPPORT,
+                "আপনার বিষয়টি বুঝতে পেরেছি। একটু বিস্তারিত বা অর্ডার নম্বরটি জানাবেন? " + profile.supportPolicy, null, "Offline support fallback")
+        return AiReplyResult(MessageIntent.CUSTOMER_SUPPORT,
+            "আপনার মেসেজটি পেয়েছি। সঠিক তথ্য দিয়ে সাহায্য করার জন্য বিষয়টি আমাদের দায়িত্বশীল ব্যক্তিকে জানানো হবে। একটু সময় দিন, অনুগ্রহ করে。",
+            null, "Offline safe fallback")
     }
 
-    companion object {
-        private const val TAG = "AiReplyEngine"
-        private const val MODEL_NAME = "gemini-3.8-flash"
-        private const val TIMEOUT_MS = 60_000L
+    private fun classify(q: String) = when {
+        listOf("দাম", "কত", "price", "পণ্য", "product").any(q::contains) -> MessageIntent.PRODUCT_INQUIRY
+        listOf("হাই", "হ্যালো", "hello", "hi", "সালাম").any(q::contains) -> MessageIntent.CASUAL_CHAT
+        else -> MessageIntent.CUSTOMER_SUPPORT
     }
+
+    private fun makePrompt(sender: String, message: String, profile: BusinessProfile, products: List<Product>): String {
+        val tone = when (GreetingStyle.fromRaw(profile.greetingStyle)) {
+            GreetingStyle.FRIENDLY -> "Warm and friendly"
+            GreetingStyle.PROFESSIONAL -> "Polite and professional"
+            GreetingStyle.CASUAL -> "Relaxed and conversational"
+        }
+        val catalog = if (products.isEmpty()) "No catalog items; ask for the product name" else products.joinToString("\n") { p ->
+            val price = if (p.price % 1.0 == 0.0) p.price.toLong().toString() else p.price.toString()
+            p.name + " | " + p.currency + price + " | " + (if (p.inStock) "In stock" else "Out of stock") + " | " + p.description
+        }
+        return "You are the messaging assistant for " + profile.businessName +
+            ". Reply in the customer's same language/script (Bengali, Banglish, English). Classify intent as PRODUCT_INQUIRY, CASUAL_CHAT, CUSTOMER_SUPPORT. " +
+            "Use only catalog for prices/stock; never invent facts. Support policy: " + profile.supportPolicy +
+            ". Tone: " + tone + ". Casual chat enabled: " + profile.casualChatEnabled +
+            ". Return concise reply and JSON keys intent, reply, matchedProductName, summaryNote. Sender: " + sender +
+            ". Incoming message: " + message + ". Catalog:\n" + catalog
+    }
+
+    private class GroqError(val status: Int, detail: String) : Exception(detail)
 }
