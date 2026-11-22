@@ -30,7 +30,7 @@ class AutoReplyNotificationService : NotificationListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var localCache: LocalBridgeCache
-    private val aiEngine by lazy { AiReplyEngine() }
+    private val aiEngine by lazy { AiReplyEngine(localCache) }
     private val recentReplyTimestamps = ConcurrentHashMap<String, Long>()
     private val inFlightReplyKeys = ConcurrentHashMap.newKeySet<String>()
 
