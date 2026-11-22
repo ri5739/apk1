@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -53,7 +52,6 @@ class MainActivity : ComponentActivity() {
 fun AppContent() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val credentialManager = remember(context) { CredentialManager.create(context) }
 
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
 
@@ -69,7 +67,6 @@ fun AppContent() {
         if (Firebase.auth.currentUser == null) {
             attemptAutoSignIn(
                 context = context,
-                credentialManager = credentialManager,
                 onAuthSuccess = { currentUser = Firebase.auth.currentUser },
                 onUnauthenticated = {},
                 scope = scope
@@ -106,7 +103,6 @@ fun AppContent() {
                 viewModel = viewModel,
                 onSignOut = {
                     signOutUser(
-                        credentialManager = credentialManager,
                         scope = scope,
                         onBeforeSignOut = {
                             LocalBridgeCache(context).clearOnSignOut()
