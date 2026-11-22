@@ -1,0 +1,6 @@
+{
+  "name": "ShopReply AI",
+  "description": "24/7 AI messaging auto-reply and customer support assistant for WhatsApp Business and Facebook Messenger.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

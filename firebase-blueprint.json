@@ -1,0 +1,205 @@
+{
+  "entities": {
+    "BusinessProfile": {
+      "title": "BusinessProfile",
+      "description": "Shop owner profile, AI persona settings, customer support policies, and auto-reply preferences.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID"
+        },
+        "businessName": {
+          "type": "string",
+          "description": "Display name of the Facebook Page or WhatsApp Business shop"
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Shop owner name"
+        },
+        "greetingStyle": {
+          "type": "string",
+          "enum": ["FRIENDLY", "PROFESSIONAL", "CASUAL"],
+          "description": "AI conversational tone for replies"
+        },
+        "supportPolicy": {
+          "type": "string",
+          "description": "Delivery charges, return/refund rules, and customer service instructions"
+        },
+        "casualChatEnabled": {
+          "type": "boolean",
+          "description": "Whether the AI engages naturally in casual small talk"
+        },
+        "autoReplyEnabled": {
+          "type": "boolean",
+          "description": "Master switch for 24/7 automatic notification replies"
+        },
+        "replyToGroups": {
+          "type": "boolean",
+          "description": "Whether to auto-reply to group chat notifications"
+        },
+        "enabledApps": {
+          "type": "array",
+          "description": "Package names of messaging apps enabled for auto-reply (max 10)"
+        },
+        "languagePreference": {
+          "type": "string",
+          "enum": ["BN", "EN"],
+          "description": "UI display language preference"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()"
+        }
+      },
+      "required": [
+        "userId",
+        "businessName",
+        "ownerName",
+        "greetingStyle",
+        "supportPolicy",
+        "casualChatEnabled",
+        "autoReplyEnabled",
+        "replyToGroups",
+        "enabledApps",
+        "languagePreference",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product catalog item used by Gemini AI to answer client inquiries accurately.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Product title"
+        },
+        "price": {
+          "type": "number",
+          "description": "Product price"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency symbol or code (e.g. ৳, BDT, $)"
+        },
+        "category": {
+          "type": "string",
+          "description": "Product category"
+        },
+        "description": {
+          "type": "string",
+          "description": "Product details, sizes, colors, and warranty notes"
+        },
+        "inStock": {
+          "type": "boolean",
+          "description": "Current stock availability"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()"
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "price",
+        "currency",
+        "category",
+        "description",
+        "inStock",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ReplyLog": {
+      "title": "ReplyLog",
+      "description": "Audit log of incoming client messages and AI-generated replies.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID"
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Client name or sender title"
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["WHATSAPP", "WHATSAPP_BUSINESS", "MESSENGER", "INSTAGRAM", "SIMULATOR", "OTHER"],
+          "description": "Source messaging platform"
+        },
+        "incomingMessage": {
+          "type": "string",
+          "description": "Original client message"
+        },
+        "aiReply": {
+          "type": "string",
+          "description": "Generated AI reply sent or previewed"
+        },
+        "intent": {
+          "type": "string",
+          "enum": ["PRODUCT_INQUIRY", "CASUAL_CHAT", "CUSTOMER_SUPPORT"],
+          "description": "Detected client message intent"
+        },
+        "repliedAutomatically": {
+          "type": "boolean",
+          "description": "True if sent automatically via NotificationListenerService"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()"
+        }
+      },
+      "required": [
+        "userId",
+        "senderName",
+        "platform",
+        "incomingMessage",
+        "aiReply",
+        "intent",
+        "repliedAutomatically",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/BusinessProfile" },
+      "description": "Shop owner profile and AI auto-reply configuration"
+    },
+    "/users/{userId}/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Shop owner's product catalog subcollection"
+    },
+    "/users/{userId}/replyLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ReplyLog" },
+      "description": "Recent AI auto-reply and sandbox test logs"
+    }
+  }
+}

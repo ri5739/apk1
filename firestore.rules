@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidBusinessProfile(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.businessName is string && data.businessName.size() >= 1 && data.businessName.size() <= 100 &&
+             data.ownerName is string && data.ownerName.size() <= 100 &&
+             data.greetingStyle in ['FRIENDLY', 'PROFESSIONAL', 'CASUAL'] &&
+             data.supportPolicy is string && data.supportPolicy.size() <= 1500 &&
+             data.casualChatEnabled is bool &&
+             data.autoReplyEnabled is bool &&
+             data.replyToGroups is bool &&
+             data.enabledApps is list && data.enabledApps.size() <= 10 &&
+             (data.enabledApps.size() == 0 || (data.enabledApps[0] is string && data.enabledApps[0].size() <= 120)) &&
+             data.languagePreference in ['BN', 'EN'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidProduct(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.price is number && data.price >= 0 && data.price <= 100000000 &&
+             data.currency is string && data.currency.size() >= 1 && data.currency.size() <= 10 &&
+             data.category is string && data.category.size() <= 60 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.inStock is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidReplyLog(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 120 &&
+             data.platform in ['WHATSAPP', 'WHATSAPP_BUSINESS', 'MESSENGER', 'INSTAGRAM', 'SIMULATOR', 'OTHER'] &&
+             data.incomingMessage is string && data.incomingMessage.size() >= 1 && data.incomingMessage.size() <= 2000 &&
+             data.aiReply is string && data.aiReply.size() >= 1 && data.aiReply.size() <= 3000 &&
+             data.intent in ['PRODUCT_INQUIRY', 'CASUAL_CHAT', 'CUSTOMER_SUPPORT'] &&
+             data.repliedAutomatically is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'businessName', 'ownerName', 'greetingStyle',
+                         'supportPolicy', 'casualChatEnabled', 'autoReplyEnabled',
+                         'replyToGroups', 'enabledApps', 'languagePreference',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'businessName', 'ownerName', 'greetingStyle',
+                         'supportPolicy', 'casualChatEnabled', 'autoReplyEnabled',
+                         'replyToGroups', 'enabledApps', 'languagePreference',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidBusinessProfile(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidBusinessProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'businessName', 'ownerName', 'greetingStyle',
+                         'supportPolicy', 'casualChatEnabled', 'autoReplyEnabled',
+                         'replyToGroups', 'enabledApps', 'languagePreference',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /products/{productId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(productId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(productId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'price', 'currency', 'category',
+                           'description', 'inStock', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'price', 'currency', 'category',
+                           'description', 'inStock', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidProduct(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(productId) &&
+                         isValidProduct(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'price', 'currency', 'category',
+                           'description', 'inStock', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(productId);
+      }
+
+      match /replyLogs/{logId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(logId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(logId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'senderName', 'platform', 'incomingMessage',
+                           'aiReply', 'intent', 'repliedAutomatically',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'senderName', 'platform', 'incomingMessage',
+                           'aiReply', 'intent', 'repliedAutomatically',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidReplyLog(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(logId) &&
+                         isValidReplyLog(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'repliedAutomatically', 'aiReply', 'intent', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(logId);
+      }
+    }
+  }
+}
