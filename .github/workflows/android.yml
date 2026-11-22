@@ -73,5 +73,6 @@ jobs:
           else
             gh release create latest ShopReply-AI.apk \
               --title "ShopReply AI Latest APK" \
-              --notes "Latest direct-download APK build from the main branch."
+              --notes "Latest direct-download APK build from the main branch." \
+              --latest
           fi
