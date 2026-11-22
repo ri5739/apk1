@@ -108,6 +108,27 @@ class AutoReplyNotificationService : NotificationListenerService() {
         }
     }
 
+    private fun extractSenderAndMessage(extras: Bundle): Pair<String, String> {
+        val sender = extras.getCharSequence(Notification.EXTRA_TITLE)
+            ?.toString()?.trim().orEmpty()
+
+        val message = sequenceOf(
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+            .firstOrNull().orEmpty()
+
+        val resolvedMessage = if (message.isNotBlank()) {
+            message
+        } else {
+            extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotBlank) }
+                ?.lastOrNull().orEmpty()
+        }
+
+        return sender to resolvedMessage
+    }
+
     private fun sendRemoteInputReply(action: Notification.Action, replyText: String): Boolean {
         val remoteInputs = action.remoteInputs ?: return false
         val pendingIntent = action.actionIntent ?: return false
