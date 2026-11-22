@@ -94,7 +94,8 @@ fun AppContent() {
                         val cache = LocalBridgeCache(app)
                         ShopViewModel(
                             repository = ShopRepository(db = db, localCache = cache),
-                            currentUserId = uid
+                            currentUserId = uid,
+                            localCache = cache
                         )
                     }
                 }
