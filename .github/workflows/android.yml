@@ -70,6 +70,7 @@ jobs:
         run: |
           if gh release view latest >/dev/null 2>&1; then
             gh release upload latest ShopReply-AI.apk --clobber
+            gh release edit latest --latest
           else
             gh release create latest ShopReply-AI.apk \
               --title "ShopReply AI Latest APK" \
