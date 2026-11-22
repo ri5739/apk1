@@ -21,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
@@ -82,12 +83,24 @@ class AutoReplyNotificationService : NotificationListenerService() {
 
         serviceScope.launch {
             try {
-                val aiResult = aiEngine.generateReply(
-                    senderName = senderName,
-                    incomingMessage = messageText,
-                    profile = profile,
-                    products = products
-                )
+                val aiResult = try {
+                    aiEngine.generateReply(
+                        senderName = senderName,
+                        incomingMessage = messageText,
+                        profile = profile,
+                        products = products
+                    )
+                } catch (firstError: Exception) {
+                    if (firstError is kotlinx.coroutines.CancellationException) throw firstError
+                    Log.w(TAG, "AI generation failed once; retrying safely before any send", firstError)
+                    delay(1_000L)
+                    aiEngine.generateReply(
+                        senderName = senderName,
+                        incomingMessage = messageText,
+                        profile = profile,
+                        products = products
+                    )
+                }
 
                 val sent = sendRemoteInputReply(replyAction, aiResult.reply)
                 if (sent) {
