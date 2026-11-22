@@ -44,6 +44,7 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.BusinessProfile
 import com.example.data.model.DEFAULT_SUPPORTED_CHANNELS
 import com.example.data.model.GreetingStyle
+import com.example.service.AutoReplyNotificationService
 import com.example.ui.AppStrings
 import com.example.ui.BengaliStrings
 
@@ -92,6 +93,46 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
+            }
+
+            item {
+                val context = LocalContext.current
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (isBn) "WhatsApp / Messenger সংযোগ" else "WhatsApp / Messenger Connection",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (isBn)
+                                "অটো রিপ্লাই চালাতে ShopReply AI-কে Notification Access দিতে হবে। নিচের বাটনে চাপ দিয়ে সেটিংস খুলুন, ShopReply AI চালু করুন, তারপর অ্যাপে ফিরে আসুন।"
+                            else
+                                "Auto-reply needs Notification Access. Open settings below, enable ShopReply AI, then return to the app.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Button(
+                            onClick = { AutoReplyNotificationService.openNotificationListenerSettings(context) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isBn) "Notification Access চালু / পরীক্ষা করুন" else "Enable / Check Notification Access")
+                        }
+                        Text(
+                            text = if (isBn)
+                                "WhatsApp ও Messenger-এর Notification এবং Reply অপশন চালু রাখুন। শুধু Notification-এ Reply action থাকলে স্বয়ংক্রিয় উত্তর পাঠানো সম্ভব।"
+                            else
+                                "Keep notifications and reply actions enabled in WhatsApp/Messenger. Automatic replies only work when a notification exposes a reply action.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
             }
 
             item {
