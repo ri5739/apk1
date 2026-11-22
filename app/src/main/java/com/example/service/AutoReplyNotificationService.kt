@@ -1,6 +1,7 @@
 package com.example.service
 
 import android.app.Notification
+import android.app.Person
 import android.app.RemoteInput
 import android.content.ComponentName
 import android.content.Context
@@ -128,26 +129,34 @@ class AutoReplyNotificationService : NotificationListenerService() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun extractSenderAndMessage(extras: Bundle): Pair<String, String> {
-        // Prefer Android MessagingStyle data, which usually identifies the actual sender
-        // in group notifications rather than only the conversation title.
-        val rawMessages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-        if (rawMessages != null) {
-            for (raw in rawMessages.reversed()) {
-                val messageBundle = raw as? Bundle ?: continue
+        // MessagingStyle may expose sender as android.app.Person, a text value,
+        // or a legacy Bundle. Do not assume the sender field is always a Bundle.
+        val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        if (messages != null) {
+            for (item in messages.reversed()) {
+                val messageBundle = item as? Bundle ?: continue
                 val text = messageBundle.getCharSequence("text")?.toString()?.trim().orEmpty()
                 if (text.isBlank()) continue
-                val personBundle = messageBundle.getBundle("sender")
-                val sender = personBundle?.getCharSequence("name")?.toString()?.trim().orEmpty()
+
+                val person = messageBundle.getParcelable("sender_person") as? Person
+                val personName = person?.name?.toString()?.trim().orEmpty()
+                val senderValue = messageBundle.get("sender")
+                val senderFromBundle = (senderValue as? Bundle)
+                    ?.getCharSequence("name")?.toString()?.trim().orEmpty()
+                val senderFromText = senderValue as? CharSequence
+                val sender = personName.ifBlank {
+                    senderFromBundle.ifBlank { senderFromText?.toString()?.trim().orEmpty() }
+                }
                 if (sender.isNotBlank()) return sender to text
             }
         }
 
-        val sender = sequenceOf(
-            extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
-            extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
-        ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
-            .firstOrNull().orEmpty()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+        val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)
+            ?.toString()?.trim().orEmpty()
+        val sender = title.ifBlank { conversationTitle }
 
         val message = sequenceOf(
             extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
@@ -155,10 +164,9 @@ class AutoReplyNotificationService : NotificationListenerService() {
         ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
             .firstOrNull()
 
-        val resolvedMessage = message ?: extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
             ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotBlank) }
-            ?.lastOrNull().orEmpty()
-
+        val resolvedMessage = message ?: lines?.lastOrNull().orEmpty()
         return sender to resolvedMessage
     }
 
